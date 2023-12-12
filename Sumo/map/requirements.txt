@@ -1,0 +1,9 @@
+sumolib
+matplotlib
+numpy
+networkx
+shapely
+pandas==2.1.1
+gurobipy==10.0.3
+typer==0.9.0
+libsumo==1.18.0
