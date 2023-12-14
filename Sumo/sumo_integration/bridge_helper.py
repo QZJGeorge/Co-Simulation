@@ -96,6 +96,24 @@ class BridgeHelper(object):
         return out_transform
 
     @staticmethod
+    def _get_recommended_carla_blueprint_from_sumo_redis(sumo_actor_vclass_value):
+        """
+        Returns an appropriate blueprint based on the given sumo actor.
+        """
+        vclass = sumo_actor_vclass_value
+
+        blueprints = []
+        for blueprint in BridgeHelper.blueprint_library:
+            if blueprint.id in BridgeHelper._VTYPES and \
+               BridgeHelper._VTYPES[blueprint.id]['vClass'] == vclass:
+                blueprints.append(blueprint)
+
+        if not blueprints:
+            return None
+
+        return random.choice(blueprints)
+    
+    @staticmethod
     def _get_recommended_carla_blueprint(sumo_actor):
         """
         Returns an appropriate blueprint based on the given sumo actor.
@@ -125,7 +143,7 @@ class BridgeHelper(object):
             blueprint = blueprint_library.filter(type_id)[0]
             logging.debug('[BridgeHelper] sumo vtype %s found in carla blueprints', type_id)
         else:
-            blueprint = BridgeHelper._get_recommended_carla_blueprint(sumo_actor)
+            blueprint = BridgeHelper._get_recommended_carla_blueprint_from(sumo_actor)
             if blueprint is not None:
                 logging.warning(
                     'sumo vtype %s not found in carla. The following blueprint will be used: %s',
@@ -154,6 +172,50 @@ class BridgeHelper(object):
             \tblueprint: %s
             \tcolor: %s''', type_id, blueprint.id,
             sumo_actor.color if blueprint.has_attribute('color') else (-1, -1, -1))
+
+        return blueprint
+
+    @staticmethod
+    def get_carla_blueprint_from_sumo_redis(sumo_actor_type_id, sumo_actor_color, sumo_actor_vclass_value, sync_color=False):
+        """
+        Returns an appropriate blueprint based on the received sumo actor.
+        """
+        blueprint_library = BridgeHelper.blueprint_library
+        type_id = sumo_actor_type_id
+
+        if type_id in [bp.id for bp in blueprint_library]:
+            blueprint = blueprint_library.filter(type_id)[0]
+            logging.debug('[BridgeHelper] sumo vtype %s found in carla blueprints', type_id)
+        else:
+            blueprint = BridgeHelper._get_recommended_carla_blueprint_from_sumo_redis(sumo_actor_vclass_value)
+            if blueprint is not None:
+                logging.warning(
+                    'sumo vtype %s not found in carla. The following blueprint will be used: %s',
+                    type_id, blueprint.id)
+            else:
+                logging.error('sumo vtype %s not supported. No vehicle will be spawned in carla',
+                              type_id)
+                return None
+
+        if blueprint.has_attribute('color'):
+            if sync_color:
+                color = "{},{},{}".format(sumo_actor_color[0], sumo_actor_color[1],
+                                          sumo_actor_color[2])
+            else:
+                color = random.choice(blueprint.get_attribute('color').recommended_values)
+            blueprint.set_attribute('color', color)
+
+        if blueprint.has_attribute('driver_id'):
+            driver_id = random.choice(blueprint.get_attribute('driver_id').recommended_values)
+            blueprint.set_attribute('driver_id', driver_id)
+
+        blueprint.set_attribute('role_name', 'sumo_driver')
+
+        logging.debug(
+            '''[BridgeHelper] sumo vtype %s will be spawned in carla with the following attributes:
+            \tblueprint: %s
+            \tcolor: %s''', type_id, blueprint.id,
+            sumo_actor_color if blueprint.has_attribute('color') else (-1, -1, -1))
 
         return blueprint
 
