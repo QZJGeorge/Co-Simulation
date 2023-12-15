@@ -143,11 +143,12 @@ class BridgeHelper(object):
             blueprint = blueprint_library.filter(type_id)[0]
             logging.debug('[BridgeHelper] sumo vtype %s found in carla blueprints', type_id)
         else:
-            blueprint = BridgeHelper._get_recommended_carla_blueprint_from(sumo_actor)
+            blueprint = BridgeHelper._get_recommended_carla_blueprint(sumo_actor)
             if blueprint is not None:
-                logging.warning(
-                    'sumo vtype %s not found in carla. The following blueprint will be used: %s',
-                    type_id, blueprint.id)
+                tmp = 0
+                # logging.warning(
+                #     'sumo vtype %s not found in carla. The following blueprint will be used: %s',
+                #     type_id, blueprint.id)
             else:
                 logging.error('sumo vtype %s not supported. No vehicle will be spawned in carla',
                               type_id)
@@ -189,9 +190,10 @@ class BridgeHelper(object):
         else:
             blueprint = BridgeHelper._get_recommended_carla_blueprint_from_sumo_redis(sumo_actor_vclass_value)
             if blueprint is not None:
-                logging.warning(
-                    'sumo vtype %s not found in carla. The following blueprint will be used: %s',
-                    type_id, blueprint.id)
+                tmp = 0
+                # logging.warning(
+                #     'sumo vtype %s not found in carla. The following blueprint will be used: %s',
+                #     type_id, blueprint.id)
             else:
                 logging.error('sumo vtype %s not supported. No vehicle will be spawned in carla',
                               type_id)

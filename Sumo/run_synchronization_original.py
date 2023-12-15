@@ -316,7 +316,7 @@ if __name__ == '__main__':
                            type=str,
                            choices=['none', 'sumo', 'carla'],
                            help="select traffic light manager (default: none)",
-                           default='none')
+                           default='sumo')
     argparser.add_argument('--debug', action='store_true', help='enable debug messages')
     arguments = argparser.parse_args()
 

@@ -50,8 +50,6 @@ except IndexError:
 # ==================================================================================================
 
 from sumo_integration.bridge_helper import BridgeHelper  # pylint: disable=wrong-import-position
-from sumo_integration.carla_simulation import CarlaSimulation  # pylint: disable=wrong-import-position
-from sumo_integration.constants import INVALID_ACTOR_ID  # pylint: disable=wrong-import-position
 from sumo_integration.sumo_simulation import SumoSimulation  # pylint: disable=wrong-import-position
 
 # ==================================================================================================
@@ -84,22 +82,9 @@ class SimulationSynchronization(object):
         #     self.carla.switch_off_traffic_lights()
 
         # Mapped actor ids.
-        self.sumo2carla_ids = {}  # Contains only actors controlled by sumo.
-        # self.carla2sumo_ids = {}  # Contains only actors controlled by carla.
+        self.sumo2carla_ids = set()
 
-        self.sumo_actor_ids = set()
-
-        # BridgeHelper.blueprint_library = self.carla.world.get_blueprint_library()
         BridgeHelper.offset = self.sumo.get_net_offset()
-
-        # Configuring carla simulation in sync mode.
-        # settings = self.carla.world.get_settings()
-        # settings.synchronous_mode = True
-        # settings.fixed_delta_seconds = self.carla.step_length
-        # self.carla.world.apply_settings(settings)
-
-        # traffic_manager = self.carla.client.get_trafficmanager()
-        # traffic_manager.set_synchronous_mode(True)
 
     def tick(self):
         """
@@ -110,72 +95,45 @@ class SimulationSynchronization(object):
         # -----------------
         self.sumo.tick()
 
-        # Spawning new sumo actors in carla (i.e, not controlled by carla).
+        # Spawning new sumo actors (i.e, not controlled by carla).
         sumo_spawned_actors = self.sumo.spawned_actors
         
         for sumo_actor_id in sumo_spawned_actors:
+            self.sumo2carla_ids.add(sumo_actor_id)
             self.sumo.subscribe(sumo_actor_id)
-
-            self.sumo_actor_ids.add(sumo_actor_id)
-            # sumo_actor = self.sumo.get_actor(sumo_actor_id)
-
-            # carla_blueprint = BridgeHelper.get_carla_blueprint(sumo_actor, self.sync_vehicle_color)
-            # if carla_blueprint is not None:
-            #     carla_transform = BridgeHelper.get_carla_transform(sumo_actor.transform,
-            #                                                        sumo_actor.extent)
-
-            #     carla_actor_id = self.carla.spawn_actor(carla_blueprint, carla_transform)
-            #     if carla_actor_id != INVALID_ACTOR_ID:
-            #         self.sumo2carla_ids[sumo_actor_id] = carla_actor_id
-            # else:
-            #     self.sumo.unsubscribe(sumo_actor_id)
 
         # Destroying sumo arrived actors in carla.
         for sumo_actor_id in self.sumo.destroyed_actors:
-            self.sumo_actor_ids.remove(sumo_actor_id)
-            # if sumo_actor_id in self.sumo2carla_ids:
-            #     self.carla.destroy_actor(self.sumo2carla_ids.pop(sumo_actor_id))
+            if sumo_actor_id in self.sumo2carla_ids:
+                self.sumo2carla_ids.remove(sumo_actor_id)
 
-        # Updating sumo actors in carla.
-        # for sumo_actor_id in self.sumo2carla_ids:
-        #     carla_actor_id = self.sumo2carla_ids[sumo_actor_id]
-
-        #     sumo_actor = self.sumo.get_actor(sumo_actor_id)
-        #     carla_actor = self.carla.get_actor(carla_actor_id)
-
-        #     # apply offset (may not be accurate)
-        #     sumo_actor.transform.location.z -= 34.5
-        #     sumo_actor.transform.location.x += 97.0
-        #     sumo_actor.transform.location.y += 122.0
-
-        #     carla_transform = BridgeHelper.get_carla_transform(sumo_actor.transform,
-        #                                                        sumo_actor.extent)
-        #     if self.sync_vehicle_lights:
-        #         carla_lights = BridgeHelper.get_carla_lights_state(carla_actor.get_light_state(),
-        #                                                            sumo_actor.signals)
-        #     else:
-        #         carla_lights = None
-
-        #     self.carla.synchronize_vehicle(carla_actor_id, carla_transform, carla_lights)
+        # remove invalid sumo actors from carla
+        invalid_sumo_ids = self.redis.get('invalid_sumo_ids')
+        if invalid_sumo_ids is not None:
+            invalid_sumo_ids = json.loads(invalid_sumo_ids)
+            for sumo_actor_id in invalid_sumo_ids:
+                if sumo_actor_id in self.sumo2carla_ids:
+                    self.sumo2carla_ids.remove(sumo_actor_id)
+                    self.sumo.unsubscribe(sumo_actor_id)
         
-        cav_context = {}
+        sumo_context = {}
 
-        for sumo_actor_id in self.sumo_actor_ids:
+        for sumo_actor_id in self.sumo2carla_ids:
 
             sumo_actor = self.sumo.get_actor(sumo_actor_id)
 
-            position = {}
-            orientation = {}
+            location = {}
+            rotation = {}
             extent = {}
 
             # apply offset (may not be accurate)
-            position["x"] = sumo_actor.transform.location.x = 97.0
-            position["y"] = sumo_actor.transform.location.y = 122.0
-            position["z"] = sumo_actor.transform.location.z - 34.5
+            location["x"] = sumo_actor.transform.location.x + 97.0
+            location["y"] = sumo_actor.transform.location.y + 122.0
+            location["z"] = sumo_actor.transform.location.z - 34.5
 
-            orientation["roll"] = sumo_actor.transform.rotation.roll
-            orientation["pitch"] = sumo_actor.transform.rotation.pitch
-            orientation["yaw"] = sumo_actor.transform.rotation.yaw
+            rotation["roll"] = sumo_actor.transform.rotation.roll
+            rotation["pitch"] = sumo_actor.transform.rotation.pitch
+            rotation["yaw"] = sumo_actor.transform.rotation.yaw
 
             extent["x"] = sumo_actor.extent.x
             extent["y"] = sumo_actor.extent.y
@@ -183,17 +141,18 @@ class SimulationSynchronization(object):
 
             actor = {}
 
-            actor["position"] = position
-            actor["orientation"] = orientation
+            actor["location"] = location
+            actor["rotation"] = rotation
             actor["extent"] = extent
             actor["type_id"] = sumo_actor.type_id
             actor["vclass"] = sumo_actor.vclass.value
             actor["color"] = sumo_actor.color
+            actor["lights"] = sumo_actor.signals
 
-            cav_context[sumo_actor_id] = actor
+            sumo_context[sumo_actor_id] = actor
 
-        cav_context_json = json.dumps(cav_context)
-        self.redis.set('cav_context', cav_context_json)
+        sumo_context_json = json.dumps(sumo_context)
+        self.redis.set('sumo_context', sumo_context_json)
 
         # # Updates traffic lights in carla based on sumo information.
         # if self.tls_manager == 'sumo':
@@ -201,85 +160,18 @@ class SimulationSynchronization(object):
         #     for landmark_id in common_landmarks:
         #         sumo_tl_state = self.sumo.get_traffic_light_state(landmark_id)
         #         carla_tl_state = BridgeHelper.get_carla_traffic_light_state(sumo_tl_state)
-
         #         self.carla.synchronize_traffic_light(landmark_id, carla_tl_state)
-
-        # -----------------
-        # carla-->sumo sync
-        # -----------------
-        # self.carla.tick()
-
-        # Spawning new carla actors (not controlled by sumo)
-        # carla_spawned_actors = self.carla.spawned_actors - set(self.sumo2carla_ids.values())
-        # for carla_actor_id in carla_spawned_actors:
-        #     carla_actor = self.carla.get_actor(carla_actor_id)
-
-        #     type_id = BridgeHelper.get_sumo_vtype(carla_actor)
-        #     color = carla_actor.attributes.get('color', None) if self.sync_vehicle_color else None
-        #     if type_id is not None:
-        #         sumo_actor_id = self.sumo.spawn_actor(type_id, color)
-        #         if sumo_actor_id != INVALID_ACTOR_ID:
-        #             self.carla2sumo_ids[carla_actor_id] = sumo_actor_id
-        #             self.sumo.subscribe(sumo_actor_id)
-
-        # Destroying required carla actors in sumo.
-        # for carla_actor_id in self.carla.destroyed_actors:
-        #     if carla_actor_id in self.carla2sumo_ids:
-        #         self.sumo.destroy_actor(self.carla2sumo_ids.pop(carla_actor_id))
-
-        # Updating carla actors in sumo.
-        # for carla_actor_id in self.carla2sumo_ids:
-        #     sumo_actor_id = self.carla2sumo_ids[carla_actor_id]
-
-        #     carla_actor = self.carla.get_actor(carla_actor_id)
-        #     sumo_actor = self.sumo.get_actor(sumo_actor_id)
-
-        #     sumo_transform = BridgeHelper.get_sumo_transform(carla_actor.get_transform(),
-        #                                                      carla_actor.bounding_box.extent)
-        #     if self.sync_vehicle_lights:
-        #         carla_lights = self.carla.get_actor_light_state(carla_actor_id)
-        #         if carla_lights is not None:
-        #             sumo_lights = BridgeHelper.get_sumo_lights_state(sumo_actor.signals,
-        #                                                              carla_lights)
-        #         else:
-        #             sumo_lights = None
-        #     else:
-        #         sumo_lights = None
-
-        #     self.sumo.synchronize_vehicle(sumo_actor_id, sumo_transform, sumo_lights)
-
-        # Updates traffic lights in sumo based on carla information.
-        # if self.tls_manager == 'carla':
-        #     common_landmarks = self.sumo.traffic_light_ids & self.carla.traffic_light_ids
-        #     for landmark_id in common_landmarks:
-        #         carla_tl_state = self.carla.get_traffic_light_state(landmark_id)
-        #         sumo_tl_state = BridgeHelper.get_sumo_traffic_light_state(carla_tl_state)
-
-        #         # Updates all the sumo links related to this landmark.
-        #         self.sumo.synchronize_traffic_light(landmark_id, sumo_tl_state)
 
     def close(self):
         """
         Cleans synchronization.
         """
-        # Configuring carla simulation in async mode.
-        # settings = self.carla.world.get_settings()
-        # settings.synchronous_mode = False
-        # settings.fixed_delta_seconds = None
-        # self.carla.world.apply_settings(settings)
-
-        # Destroying synchronized actors.
-        # for carla_actor_id in self.sumo2carla_ids.values():
-        #     self.carla.destroy_actor(carla_actor_id)
-
-        # for sumo_actor_id in self.carla2sumo_ids.values():
-        #     self.sumo.destroy_actor(sumo_actor_id)
-        for sumo_actor_id in self.sumo_actor_ids:
+        for sumo_actor_id in self.sumo2carla_ids:
             self.sumo.destroy_actor(sumo_actor_id)
 
-        # Closing sumo and carla client.
-        # self.carla.close()
+        # Closing sumo client.
         self.sumo.close()
+        self.redis.flushall()
 
 
 def synchronization_loop(args):
