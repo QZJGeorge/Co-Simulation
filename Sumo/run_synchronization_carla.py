@@ -179,14 +179,14 @@ class SimulationSynchronization(object):
             # Now remove noted items from the dictionary
             for sumo_actor_id in to_be_removed:
                 self.carla.destroy_actor(self.sumo2carla_ids.pop(sumo_actor_id))
-                
+
         # Updates traffic lights in carla based on sumo information.
-        # if self.tls_manager == 'sumo':
-        #     common_landmarks = self.sumo.traffic_light_ids & self.carla.traffic_light_ids
-        #     for landmark_id in common_landmarks:
-        #         sumo_tl_state = self.sumo.get_traffic_light_state(landmark_id)
-        #         carla_tl_state = BridgeHelper.get_carla_traffic_light_state(sumo_tl_state)
-        #         self.carla.synchronize_traffic_light(landmark_id, carla_tl_state)
+        if self.tls_manager == 'sumo':
+            common_landmarks = self.sumo.traffic_light_ids & self.carla.traffic_light_ids
+            for landmark_id in common_landmarks:
+                sumo_tl_state = self.sumo.get_traffic_light_state(landmark_id)
+                carla_tl_state = BridgeHelper.get_carla_traffic_light_state(sumo_tl_state)
+                self.carla.synchronize_traffic_light(landmark_id, carla_tl_state)
 
         self.redis.set('invalid_sumo_ids', json.dumps(invalid_sumo_ids))
         self.carla.tick()

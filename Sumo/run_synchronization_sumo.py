@@ -20,6 +20,8 @@ import time
 import redis
 import json
 
+import carla
+
 # ==================================================================================================
 # -- find carla module -----------------------------------------------------------------------------
 # ==================================================================================================
@@ -69,6 +71,7 @@ class SimulationSynchronization(object):
                  sync_vehicle_lights=False):
 
         self.sumo = sumo_simulation
+        self.ego_id = None
 
         self.tls_manager = tls_manager
         self.sync_vehicle_color = sync_vehicle_color
@@ -99,8 +102,10 @@ class SimulationSynchronization(object):
         sumo_spawned_actors = self.sumo.spawned_actors
         
         for sumo_actor_id in sumo_spawned_actors:
-            self.sumo2carla_ids.add(sumo_actor_id)
-            self.sumo.subscribe(sumo_actor_id)
+            # To avoid loop generation
+            if 'carla' not in sumo_actor_id:
+                self.sumo2carla_ids.add(sumo_actor_id)
+                self.sumo.subscribe(sumo_actor_id)
 
         # Destroying sumo arrived actors in carla.
         for sumo_actor_id in self.sumo.destroyed_actors:
@@ -115,6 +120,25 @@ class SimulationSynchronization(object):
                 if sumo_actor_id in self.sumo2carla_ids:
                     self.sumo2carla_ids.remove(sumo_actor_id)
                     self.sumo.unsubscribe(sumo_actor_id)
+        
+        # update ego vehicle
+        ego_transform = self.redis.get('ego_transform')
+        if ego_transform is not None:
+            ego_transform = json.loads(ego_transform)
+
+            if self.ego_id is None:
+                red = '255, 0, 0, 255'
+                self.ego_id = self.sumo.spawn_actor(type_id='IDM_waymo_motion', color=red)
+            else:
+                sumo_transform = carla.Transform()
+                sumo_transform.location.x = ego_transform['location']['x']
+                sumo_transform.location.y = ego_transform['location']['y']
+                sumo_transform.location.z = ego_transform['location']['z']
+                sumo_transform.rotation.roll = ego_transform['rotation']['roll']
+                sumo_transform.rotation.pitch = ego_transform['rotation']['pitch']
+                sumo_transform.rotation.yaw = ego_transform['rotation']['yaw']
+
+                self.sumo.synchronize_vehicle(self.ego_id, sumo_transform, signals=None)
         
         sumo_context = {}
 
