@@ -100,6 +100,7 @@ class SumoActorClass(enum.Enum):
 
 
 SumoActor = collections.namedtuple('SumoActor', 'type_id vclass transform signals extent color')
+SumoActorWithSpeed = collections.namedtuple('SumoActorWithSpeed', 'type_id vclass transform signals extent color speed')
 
 # ==================================================================================================
 # -- sumo traffic lights ---------------------------------------------------------------------------
@@ -413,6 +414,34 @@ class SumoSimulation(object):
         extent = carla.Vector3D(length / 2.0, width / 2.0, height / 2.0)
 
         return SumoActor(type_id, vclass, transform, signals, extent, color)
+    
+    @staticmethod
+    def get_actor_with_speed(actor_id):
+        """
+        Accessor for sumo actor.
+        """
+        results = traci.vehicle.getSubscriptionResults(actor_id)
+
+        type_id = results[traci.constants.VAR_TYPE]
+        vclass = SumoActorClass(results[traci.constants.VAR_VEHICLECLASS])
+        color = results[traci.constants.VAR_COLOR]
+
+        length = results[traci.constants.VAR_LENGTH]
+        width = results[traci.constants.VAR_WIDTH]
+        height = results[traci.constants.VAR_HEIGHT]
+
+        location = list(results[traci.constants.VAR_POSITION3D])
+        rotation = [results[traci.constants.VAR_SLOPE], results[traci.constants.VAR_ANGLE], 0.0]
+        transform = carla.Transform(carla.Location(location[0], location[1], location[2]),
+                                    carla.Rotation(rotation[0], rotation[1], rotation[2]))
+
+        signals = results[traci.constants.VAR_SIGNALS]
+        extent = carla.Vector3D(length / 2.0, width / 2.0, height / 2.0)
+
+        speed = results[traci.constants.VAR_SPEED]
+
+        return SumoActorWithSpeed(type_id, vclass, transform, signals, extent, color, speed)
+
 
     def spawn_actor(self, type_id, color=None):
         """

@@ -144,7 +144,7 @@ class SimulationSynchronization(object):
 
         for sumo_actor_id in self.sumo2carla_ids:
 
-            sumo_actor = self.sumo.get_actor(sumo_actor_id)
+            sumo_actor = self.sumo.get_actor_with_speed(sumo_actor_id)
 
             location = {}
             rotation = {}
@@ -172,6 +172,7 @@ class SimulationSynchronization(object):
             actor["vclass"] = sumo_actor.vclass.value
             actor["color"] = sumo_actor.color
             actor["lights"] = sumo_actor.signals
+            actor["speed"] = sumo_actor.speed
 
             sumo_context[sumo_actor_id] = actor
 
