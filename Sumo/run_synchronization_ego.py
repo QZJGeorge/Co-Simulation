@@ -863,37 +863,6 @@ class CollisionSensor(object):
 
 
 # ==============================================================================
-# -- LaneInvasionSensor --------------------------------------------------------
-# ==============================================================================
-
-
-class LaneInvasionSensor(object):
-    def __init__(self, parent_actor, hud):
-        self.sensor = None
-
-        # If the spawn object is not a vehicle, we cannot use the Lane Invasion Sensor
-        if parent_actor.type_id.startswith("vehicle."):
-            self._parent = parent_actor
-            self.hud = hud
-            world = self._parent.get_world()
-            bp = world.get_blueprint_library().find('sensor.other.lane_invasion')
-            self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
-            # We need to pass the lambda a weak reference to self to avoid circular
-            # reference.
-            weak_self = weakref.ref(self)
-            self.sensor.listen(lambda event: LaneInvasionSensor._on_invasion(weak_self, event))
-
-    @staticmethod
-    def _on_invasion(weak_self, event):
-        self = weak_self()
-        if not self:
-            return
-        lane_types = set(x.type for x in event.crossed_lane_markings)
-        text = ['%r' % str(x).split()[-1] for x in lane_types]
-        self.hud.notification('Crossed line %s' % ' and '.join(text))
-
-
-# ==============================================================================
 # -- GnssSensor ----------------------------------------------------------------
 # ==============================================================================
 
@@ -1166,27 +1135,24 @@ def game_loop(args):
             world.render(display)
             pygame.display.flip()
 
-            ego = {}
-            location = {}
-            rotation = {}
-
             sumo_transform = BridgeHelper.get_sumo_transform(world.player.get_transform(),
-                                world.player.bounding_box.extent)
-            
-            # print("Sumo Transform: ", sumo_transform)
+                                        world.player.bounding_box.extent)
 
-            location['x'] = sumo_transform.location.x + 2.2
-            location['y'] = sumo_transform.location.y + 159.0
-            location['z'] = sumo_transform.location.z
+            vehicle = {
+                "location": {
+                    'x': sumo_transform.location.x + 2.2, 
+                    'y': sumo_transform.location.y + 159.0, 
+                    'z': sumo_transform.location.z
+                },
+                "rotation": {
+                    'x': sumo_transform.rotation.roll, 
+                    'y': sumo_transform.rotation.pitch, 
+                    'z': sumo_transform.rotation.yaw
+                },
+            }
 
-            rotation['roll'] = sumo_transform.rotation.roll
-            rotation['pitch'] = sumo_transform.rotation.pitch
-            rotation['yaw'] = sumo_transform.rotation.yaw
-
-            ego['location'] = location
-            ego['rotation'] = rotation
-
-            redis_server.set('ego_transform', json.dumps(ego))
+            cosim_thirdpartysim_vehicle_info = {"CARLA_EGO": vehicle}
+            redis_server.set('cosim_thirdpartysim_vehicle_info', json.dumps(cosim_thirdpartysim_vehicle_info))
 
     finally:
 
